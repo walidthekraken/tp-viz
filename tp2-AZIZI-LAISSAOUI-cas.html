@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<style>
+    .line {
+        /* pour ne pas depasser les axes */
+        clip-path: url(#clip);
+    }
+
+    .zoom {
+        cursor: move;
+        fill: none;
+        pointer-events: all;
+    }
+
+    label input {
+        background-color: orange;
+    }
+
+
+    .container {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .right-div {
+        position: relative;
+        /* 1 */
+    }
+
+    .right-div button {
+        display: block;
+        margin-bottom: 10px;
+        width: 120px;
+        background-color: white;
+        border-radius: 5%;
+        border-style: solid;
+        stroke: none;
+
+    }
+
+    .right-div label {
+        display: block;
+        margin: 10px;
+    }
+
+    #radio {
+        border: 2px solid black;
+        width: 300px;
+        background-color: #f7f7f7;
+        margin: 10px;
+        padding: 5px;
+        padding-left: 18px;
+        padding-right: 18px;
+        padding-bottom: 18px;
+        border-radius: 2%;
+    }
+
+    #checks {
+        height: 289px;
+        overflow-y: scroll;
+        border: 2px solid black;
+        background-color: white;
+        border-radius: 2%;
+    }
+
+    svg {
+        margin-top: 10px;
+    }
+
+    .focus {
+        margin-top: 10px;
+    }
+</style>
+
+<div class="container">
+    <svg width="800" height="800" class="left-div"></svg>
+    <div id="dashboard" width="800" height="800" class="right-div">
+        <p>Intéractions: </p>
+        <div id="radio">
+            <p>Filtres de données: </p>
+            <button onclick="selectAll(true)">Selectionner Tout</button>
+            <button onclick="selectAll(false)">Enlever Tout</button>
+            <div id="checks">
+
+            </div>
+        </div>
+
+    </div>
+
+</div>
+
+<script src="./d3.v6.min.js"></script>
+<script>
+
+
+    var data2;
+    var seriesNames;
+    var checkboxes;
+    var getData;
+    var contextScale = 7;
+    var focus;
+    var hover;
+    var path;
+    var line;
+    var x;
+    var y;
+    var data;
+    var scaledData;
+
+    const colorsHex = [
+        "#000000",
+
+        "#9900CC",
+        "#f286cb",
+        "#8E0152", 
+        "#C51B7D",
+     
+        "#003300",
+        "#006633",
+        "#009933",
+        "#00e633",
+
+        "#FF0000",
+        "#c66632",
+        "#ffb672",
+        "#ffd700",
+        
+        // "#003f5c",
+        "#fa8385",
+        "#ea5e90",
+        "#958cd1",
+        ]
+
+    fetch("./internet.json")
+        .then(response => response.json())
+        .then(d => {
+            // Use the `data` variable here
+            data2 = d;
+            seriesNames = []
+            
+            var obj = data2[0]
+            var i = 0
+            for (var prop in obj) {
+                    if (prop!='Year' && Object.prototype.hasOwnProperty.call(obj, prop)) {
+                        seriesNames.push(
+                            {
+                                name: prop,
+                                attr: prop,
+                                checked: true,
+                                color: colorsHex[i%colorsHex.length]
+                            }
+                        )
+                        i++;
+                    }
+            }
+            
+
+            var parseDate = d3.timeParse("%Y");
+
+            checkboxes = [];
+
+            for (var i = 0; i < seriesNames.length; i++) {
+                var label = document.createElement("label");
+                var description = document.createTextNode(seriesNames[i].name);
+                var checkbox = document.createElement("input");
+
+                label.style.color = seriesNames[i].color;
+
+                checkboxes.push(checkbox);
+
+                label.className = "checkboxContainer";
+
+                checkbox.type = "checkbox";    // make the element a checkbox
+                checkbox.id = i;
+                checkbox.checked = true;
+
+                label.appendChild(checkbox);   // add the box to the element
+                label.appendChild(description);// add the description to the element
+
+                checkbox.addEventListener('change', (event) => {
+
+                    seriesNames[event.currentTarget.id].checked = event.currentTarget.checked;
+
+                    console.log(seriesNames)
+                    data = getData(1);
+                    scaledData = getData(contextScale);
+                    focus.selectAll(".line").remove();
+
+                    path = focus.append("g")
+                        .attr("fill", "none")
+                        .attr("stroke-width", 2)
+                        .attr("stroke-linejoin", "round")
+                        .attr("stroke-linecap", "round")
+                        .selectAll("path")
+                        .data(data.series)
+                        .join("path")
+                        .style("mix-blend-mode", "multiply")
+                        .attr("class", "line")
+                        .attr("stroke", d => d.color)
+                        .attr("d", d => line(d.values));
+
+
+                    focus.call(hover, path);
+
+                })
+
+                document.getElementById('checks').appendChild(label);
+
+            }
+
+            getData = (scale) => {
+                var date1 = [];
+                var series1 = [];
+
+                var j = 0;
+                for (var i = 0; i < seriesNames.length; i++) {
+                    if (seriesNames[i].checked) {
+                        series1.push({
+                            "name": seriesNames[i].name,
+                            "values": [],
+                        })
+                        for (var k in data2) {
+                            var elem = data2[k];
+                            series1[j].values.push(elem[seriesNames[i].attr] / scale);
+                        }
+                        series1[j].color = seriesNames[i].color
+                        j = j + 1;
+
+                    }
+
+                }
+
+                for (var k in data2) {
+                    var elem = data2[k];
+                    
+                    date1.push(parseDate(elem.Year));
+                }
+
+                console.log(series1)
+
+                return {
+                    y: "Pourcentage",
+                    series: series1,
+                    dates: date1
+                };
+            }
+
+            data = getData(1);
+            scaledData = getData(contextScale);
+
+            var svg = d3.select("svg"),
+                margin = { top: 0, right: 0, bottom: 110, left: 0 },
+                margin2 = { top: 150, right: 0, bottom: 30, left: 0 },
+                width = svg.attr("width") - margin.left - margin.right,
+                height = svg.attr("height") - margin.top - margin.bottom,
+                height2 = svg.attr("height") - margin2.top - margin2.bottom;
+
+            // lignes du focus
+            line = d3.line()
+                .defined(d => !isNaN(d))
+                .x((d, i) => x(data.dates[i]))
+                .y(d => y(d))
+
+            // lignes du contexte
+            var line2 = d3.line()
+                .defined(d => !isNaN(d))
+                .x((d, i) => x(data.dates[i]))
+                .y(d => y(d))
+
+            // axe x du focus
+            var xAxis = g => g
+                .attr("transform", `translate(0,${height - margin.bottom})`)
+                .call(d3.axisBottom(x).ticks(width / 80).tickSizeOuter(10))
+
+
+            // axe x du contexte
+            var xAxis2 = g => g
+                .attr("transform", `translate(0,${height2 - margin2.bottom})`)
+                .call(d3.axisBottom(x2).ticks(width / 80).tickSizeOuter(0))
+
+            // x du focus et du contexte
+            x = d3.scaleTime().range([margin.left, width - margin.right]);
+            var x2 = d3.scaleTime().range([margin.left, width - margin.right]);
+
+            x.domain(d3.extent(data.dates));
+            x2.domain(x.domain());
+
+            // y du focus et du contexte
+            y = d3.scaleLinear().range([height - margin.bottom, margin.top+20])
+
+            y.domain([d3.min(data.series, d => d3.min(d.values)), d3.max(data.series, d => d3.max(d.values))]).nice();
+
+
+            // axe y du focus seulement
+            var yAxis = g => g
+                .attr("transform", `translate(${margin.left},0)`)
+
+                .call(d3.axisLeft(y).ticks(width / 30).tickSizeOuter(0))
+                // .call(g => g.select(".domain").remove())
+                .call(g => g.select(".tick:last-of-type text").clone()
+                    .attr("x", 3)
+                    .attr("text-anchor", "start")
+                    .attr("font-weight", "bold")
+                    .text(data.y))
+
+
+            svg.attr("viewBox", [0, -20, width-100, height + height2 - 290])
+                .style("overflow", "hidden");
+
+            focus = svg
+                .append("g")
+                .attr("class", "focus ")
+                .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+
+            focus.append("defs").append("clipPath")
+                .attr("id", "clip")
+                .append("rect")
+                .attr("width", width)
+                .attr("height", height);
+
+            focus
+                .append("text")
+                .attr("transform", "translate(" + width / 2 + " ," + (height - 70) + ")")
+                .style("text-anchor", "middle")
+                .style("font-size", "18px")
+                .text("Année");
+
+            // focus chart y label
+            svg
+                .append("text")
+                .attr("text-anchor", "middle")
+                .attr("transform", "translate(" + (-margin.left - 35) + "," + (height / 2 - 60) + ")rotate(-90)")
+                .style("font-size", "18px")
+                .text("% de la population ayant acces à internet");
+
+            svg.append("g")
+                .attr("class", "axis axis--x")
+                .attr("transform", "translate(0," + height + ")")
+                .call(xAxis);
+
+            svg.append("g")
+                .attr("class", "axis axis--y")
+                .call(yAxis);
+
+            var context = svg.append("g")
+                .attr("class", "context")
+                .attr("transform", "translate(" + margin2.left + "," + margin2.top + ")");
+
+            path = focus.append("g")
+                .attr("fill", "none")
+                .attr("stroke-width", 2)
+                .attr("stroke-linejoin", "round")
+                .attr("stroke-linecap", "round")
+                .selectAll("path")
+                .data(data.series)
+                .join("path")
+                .style("mix-blend-mode", "multiply")
+                .attr("class", "line")
+                .attr("stroke", d => d.color)
+                .attr("d", d => line(d.values));
+
+            var context = svg.append("g")
+                .attr("class", "context")
+                .attr("transform", "translate(" + margin2.left + "," + margin2.top + ")");
+
+            var path2 = context.append("g")
+                .attr("fill", "none")
+                .attr("stroke", "steelblue")
+                .attr("stroke-width", 1.5)
+                .attr("stroke-linejoin", "round")
+                .attr("stroke-linecap", "round")
+                .attr("class", "line")
+                .selectAll("path")
+                .data(scaledData.series)
+                .join("path")
+                .style("mix-blend-mode", "multiply")
+                .attr("stroke", d => d.color)
+                .attr("d", d => line2(d.values));
+
+
+            context.append("g")
+                .attr("class", "axis axis--x")
+                .attr("transform", "translate(0," + height2 + ")")
+                .call(xAxis2);
+
+            focus.call(hover, path);
+
+            var brush = d3
+                .brushX()
+                .extent([
+                    [0, height2 / 1.28],
+                    [width, height2],
+                ])
+                .on("brush end", brushed);
+
+            var brushGroup = context.append("g")
+                .attr("class", "brush")
+                .call(brush)
+                .call(brush.move, x.range());
+
+            function brushed(event) {
+                if (event.sourceEvent && event.sourceEvent.type === "zoom") return; // ignore brush-by-zoom
+                var s = event.selection || x2.range();
+                x.domain(s.map(x2.invert, x2));
+                svg.select(".axis--x").call(xAxis);
+                focus.selectAll(".line").style("mix-blend-mode", "multiply").attr("d", line).attr("d", d => line(d.values)).attr("stroke", d => d.color);
+
+            }
+        })
+        .catch(error => console.error(error));
+
+    function hover(svg, path) {
+
+        if ("ontouchstart" in document) svg
+            .style("-webkit-tap-highlight-color", "transparent")
+            .on("touchmove", moved)
+            .on("touchstart", entered)
+            .on("touchend", left)
+        else svg
+            .on("mousemove", moved)
+            .on("mouseenter", entered)
+            .on("mouseleave", left);
+
+        const dot = svg.append("g")
+            .attr("display", "none");
+
+        dot.append("circle")
+            .attr("r", 3.5)
+            .attr('stroke', 'black');
+
+
+        dot.append('rect')
+            .attr("y", -32)
+            .attr("x", -67.5)
+            .attr('width', 135)
+            .attr('height', 20)
+            .style("opacity", 1)
+            .attr('stroke', 'black')
+
+        dot.append("text")
+            .attr("font-family", "sans-serif")
+            .attr("font-size", 10)
+            .attr("text-anchor", "middle")
+            .attr("y", -19);
+
+        function hexToRgb(hex) {
+            var result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+            return result ? {
+                red: parseInt(result[1], 16),
+                green: parseInt(result[2], 16),
+                blue: parseInt(result[3], 16)
+            } : null;
+        }
+
+        function moved(event) {
+            event.preventDefault();
+            const pointer = d3.pointer(event, this);
+            const xm = x.invert(pointer[0]);
+            const ym = y.invert(pointer[1]);
+            const i = d3.bisectCenter(data.dates, xm);
+            const s = d3.least(data.series, d => Math.abs(d.values[i] - ym));
+            path.attr("stroke", d => d === s ? d.color : "#ddd").filter(d => d === s).raise();
+            dot.attr("transform", `translate(${x(data.dates[i])},${y(s.values[i])})`);
+            dot.select("text").text(s.name + " : " + s.values[i].toFixed(2));
+            dot.select("rect").attr('fill', s.color);
+            rgb = hexToRgb(s.color);
+            var textColor = ((rgb.red * 0.299 + rgb.green * 0.587 + rgb.blue * 0.114) > 150) ? "#000000" : "#ffffff";
+            dot.select("text").style('fill', textColor);
+            dot.select("circle").style('fill', textColor);
+        }
+
+        function entered() {
+            path.style("mix-blend-mode", null).attr("stroke", "#ddd");
+            dot.attr("display", null);
+        }
+
+        function left() {
+            path.style("mix-blend-mode", "multiply").attr("stroke", d => d.color);
+            dot.attr("display", "none");
+        }
+    }
+
+    const selectAll = (check) => {
+        for (var i = 0; i < seriesNames.length; i++) {
+            seriesNames[i].checked = check;
+            checkboxes[i].checked = check;
+        }
+        console.log(seriesNames)
+        data = getData(1);
+        scaledData = getData(contextScale);
+        focus.selectAll(".line").remove();
+
+        path = focus.append("g")
+            .attr("fill", "none")
+            .attr("stroke-width", 2)
+            .attr("stroke-linejoin", "round")
+            .attr("stroke-linecap", "round")
+            .selectAll("path")
+            .data(data.series)
+            .join("path")
+            .style("mix-blend-mode", "multiply")
+            .attr("class", "line")
+            .attr("stroke", d => d.color)
+            .attr("d", d => line(d.values));
+
+        focus.call(hover, path);
+
+    }
+
+
+</script>
